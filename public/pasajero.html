@@ -89,7 +89,27 @@
     font-size: 17px;
   }
   .dest-result.hint { color: #5a655f; }
+  .dest-result.warn { border-color: #d99a2b; background: #fdf5e6; }
   .dest-result strong { color: var(--accent); }
+  .dest-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .dest-option {
+    width: 100%;
+    text-align: left;
+    background: white;
+    color: var(--ink);
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 15px;
+    font-weight: 400;
+    min-height: auto;
+  }
+  .dest-option:hover { border-color: var(--accent); }
 
   #routeInfo { display: none; padding: 0 20px 20px; }
   #routeInfo.visible { display: block; }
@@ -234,6 +254,7 @@
     <input type="text" id="destAddressInput" placeholder="Escribe tu destino aquí" />
     <button id="destSearchBtn">🔍</button>
   </div>
+  <div id="destOptions" class="dest-options"></div>
   <div id="destResult" class="dest-result hint">Escribe tu destino o toca el mapa donde vas a bajarte.</div>
 </div>
 
@@ -371,6 +392,8 @@ function setVisibleStops(idsToShow) {
   });
 }
 
+const FAR_STOP_KM = 2.5;
+
 function placeDestinationPin(lat, lng) {
   const resultBox = document.getElementById('destResult');
   if (!currentStops.length) {
@@ -386,8 +409,13 @@ function placeDestinationPin(lat, lng) {
     if (d < bestDist) { bestDist = d; best = stop; }
   });
 
-  resultBox.className = 'dest-result';
-  resultBox.innerHTML = `Bájate en: <strong>${best.name}</strong> (a ${bestDist.toFixed(2)} km del punto que marcaste)`;
+  if (bestDist > FAR_STOP_KM) {
+    resultBox.className = 'dest-result warn';
+    resultBox.innerHTML = `⚠️ Esta ruta no pasa cerca de ahí (la parada más próxima, <strong>${best.name}</strong>, está a ${bestDist.toFixed(1)} km). Prueba con la otra ruta o un destino más cercano al recorrido.`;
+  } else {
+    resultBox.className = 'dest-result';
+    resultBox.innerHTML = `Bájate en: <strong>${best.name}</strong> (a ${bestDist.toFixed(2)} km del punto que marcaste)`;
+  }
 
   if (destSearchMarker) destSearchMarker.remove();
   const el = document.createElement('div');
@@ -401,13 +429,24 @@ function placeDestinationPin(lat, lng) {
 }
 
 map.on('click', (e) => {
+  document.getElementById('destOptions').innerHTML = '';
   placeDestinationPin(e.lngLat.lat, e.lngLat.lng);
 });
+
+function chooseDestinationOption(place) {
+  document.getElementById('destOptions').innerHTML = '';
+  document.getElementById('destAddressInput').value = place.displayName;
+  placeDestinationPin(place.lat, place.lng);
+  map.flyTo({ center: [place.lng, place.lat], zoom: 15 });
+}
+window.chooseDestinationOption = chooseDestinationOption;
 
 async function searchDestinationAddress() {
   const input = document.getElementById('destAddressInput');
   const resultBox = document.getElementById('destResult');
+  const optionsBox = document.getElementById('destOptions');
   const query = input.value.trim();
+  optionsBox.innerHTML = '';
 
   if (!query) {
     resultBox.className = 'dest-result hint';
@@ -433,9 +472,19 @@ async function searchDestinationAddress() {
       return;
     }
 
-    const place = results[0];
-    placeDestinationPin(place.lat, place.lng);
-    map.flyTo({ center: [place.lng, place.lat], zoom: 15 });
+    if (results.length === 1) {
+      chooseDestinationOption(results[0]);
+      return;
+    }
+
+    resultBox.className = 'dest-result hint';
+    resultBox.textContent = 'Encontramos varios lugares — elige el correcto:';
+    optionsBox.innerHTML = results
+      .map((r, i) => `<button type="button" class="dest-option" data-idx="${i}">${r.displayName}</button>`)
+      .join('');
+    optionsBox.querySelectorAll('.dest-option').forEach(btn => {
+      btn.addEventListener('click', () => chooseDestinationOption(results[Number(btn.dataset.idx)]));
+    });
   } catch (err) {
     resultBox.className = 'dest-result hint';
     resultBox.textContent = 'No se pudo buscar la dirección. Intenta de nuevo o toca el mapa.';
@@ -517,6 +566,7 @@ async function selectRoute(routeId) {
   unitMarkers = {};
   if (destSearchMarker) { destSearchMarker.remove(); destSearchMarker = null; }
   document.getElementById('destAddressInput').value = '';
+  document.getElementById('destOptions').innerHTML = '';
   document.getElementById('destResult').className = 'dest-result hint';
   document.getElementById('destResult').textContent = 'Escribe tu destino o toca el mapa donde vas a bajarte.';
 
