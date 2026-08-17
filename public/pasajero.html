@@ -425,6 +425,14 @@ function placeDestinationPin(lat, lng) {
     .setPopup(new maplibregl.Popup().setText('Tu destino'))
     .addTo(map);
 
+  if (boardedUnitId && bestDist <= FAR_STOP_KM) {
+    destinationStop = best;
+    renderUnitsList();
+  } else {
+    setVisibleStops([passengerStop ? passengerStop.id : best.id]);
+  }
+}
+
   setVisibleStops([passengerStop ? passengerStop.id : best.id]);
 }
 
