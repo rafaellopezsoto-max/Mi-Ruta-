@@ -433,9 +433,6 @@ function placeDestinationPin(lat, lng) {
   }
 }
 
-  setVisibleStops([passengerStop ? passengerStop.id : best.id]);
-}
-
 map.on('click', (e) => {
   document.getElementById('destOptions').innerHTML = '';
   placeDestinationPin(e.lngLat.lat, e.lngLat.lng);
