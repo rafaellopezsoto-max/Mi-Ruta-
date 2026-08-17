@@ -271,6 +271,25 @@ app.post('/api/units/:unitId/location', (req, res) => {
 
 // ---------- WebSocket: el pasajero se suscribe a una ruta ----------
 
+// ---------- Candado de cercania: solo se le manda al chofer la ubicacion
+// de pasajeros que esten a menos de CORRIDOR_KM de alguna parada de SU
+// ruta. Si un pasajero esta lejos del bulevar, el servidor ni siquiera
+// retransmite su posicion (no es solo ocultarla en el mapa del chofer).
+const CORRIDOR_KM = 0.4;
+const stopsCache = {};
+function getStopsForRoute(routeId) {
+  if (!stopsCache[routeId]) {
+    stopsCache[routeId] = db
+      .prepare(
+        `SELECT s.id, s.name, s.lat, s.lng, rs.sequence
+         FROM route_stops rs JOIN stops s ON s.id = rs.stop_id
+         WHERE rs.route_id = ? ORDER BY rs.sequence`
+      )
+      .all(routeId);
+  }
+  return stopsCache[routeId];
+}
+
 io.on('connection', (socket) => {
   socket.on('subscribe_route', (routeId) => {
     socket.join(`route-${routeId}`);
@@ -278,6 +297,33 @@ io.on('connection', (socket) => {
   socket.on('unsubscribe_route', (routeId) => {
     socket.leave(`route-${routeId}`);
   });
+
+  // El chofer se suscribe para ver pasajeros cercanos a su ruta actual
+  socket.on('subscribe_driver_route', (routeId) => {
+    socket.join(`chofer-route-${routeId}`);
+  });
+  socket.on('unsubscribe_driver_route', (routeId) => {
+    socket.leave(`chofer-route-${routeId}`);
+  });
+
+  // Un pasajero que activo "compartir mi ubicacion" manda su posicion aqui.
+  // Si esta lejos del bulevar de su ruta, el servidor NO la retransmite.
+  socket.on('passenger_location', ({ routeId, lat, lng, passengerId }) => {
+    if (!routeId || !passengerId || typeof lat !== 'number' || typeof lng !== 'number') return;
+    const stops = getStopsForRoute(routeId);
+    if (!stops.length) return;
+    const { distanceKm } = nearestStop(lat, lng, stops);
+    if (distanceKm <= CORRIDOR_KM) {
+      io.to(`chofer-route-${routeId}`).emit('passenger_update', { passengerId, lat, lng });
+    }
+  });
+
+  socket.on('passenger_stop_sharing', ({ routeId, passengerId }) => {
+    if (routeId && passengerId) {
+      io.to(`chofer-route-${routeId}`).emit('passenger_left', { passengerId });
+    }
+  });
+});
 });
 
 const PORT = process.env.PORT || 3000;
