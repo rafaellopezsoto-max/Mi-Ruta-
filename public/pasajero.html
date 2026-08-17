@@ -274,7 +274,7 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
 let allRoutes = [];
-let stopMarkers = [];
+let stopMarkers = {};
 let unitMarkers = {};
 let currentRouteId = null;
 let currentStops = [];
@@ -356,6 +356,14 @@ function locatePassenger() {
 
 document.getElementById('relocateBtn').addEventListener('click', locatePassenger);
 
+function setVisibleStops(idsToShow) {
+  const idSet = idsToShow ? new Set(idsToShow.filter(Boolean).map(String)) : null;
+  Object.entries(stopMarkers).forEach(([id, marker]) => {
+    const show = !idSet || idSet.has(String(id));
+    marker.getElement().style.display = show ? '' : 'none';
+  });
+}
+
 function placeDestinationPin(lat, lng) {
   const resultBox = document.getElementById('destResult');
   if (!currentStops.length) {
@@ -381,6 +389,8 @@ function placeDestinationPin(lat, lng) {
     .setLngLat([lng, lat])
     .setPopup(new maplibregl.Popup().setText('Tu destino'))
     .addTo(map);
+
+  setVisibleStops([passengerStop ? passengerStop.id : best.id]);
 }
 
 map.on('click', (e) => {
@@ -441,8 +451,8 @@ async function selectRoute(routeId) {
   renderRouteInfo(routeId);
   socket.emit('subscribe_route', routeId);
 
-  stopMarkers.forEach(m => m.remove());
-  stopMarkers = [];
+  Object.values(stopMarkers).forEach(m => m.remove());
+  stopMarkers = {};
   Object.values(unitMarkers).forEach(m => m.remove());
   unitMarkers = {};
   if (destSearchMarker) { destSearchMarker.remove(); destSearchMarker = null; }
@@ -460,12 +470,13 @@ async function selectRoute(routeId) {
       .setLngLat([stop.lng, stop.lat])
       .setPopup(new maplibregl.Popup().setText(stop.name))
       .addTo(map);
-    stopMarkers.push(marker);
+    stopMarkers[stop.id] = marker;
     bounds.extend([stop.lng, stop.lat]);
   });
   if (currentStops.length) {
     map.fitBounds(bounds, { padding: 50, duration: 500 });
   }
+  setVisibleStops(null);
 
   await loadActiveUnits();
   locatePassenger();
@@ -558,6 +569,8 @@ function renderBoardingPanel(list) {
     destinationStop = options[options.length - 1] || options[0];
   }
 
+  setVisibleStops([passengerStop ? passengerStop.id : null, destinationStop.id]);
+
   let etaText = 'Calculando…';
   if (unit.position && destinationStop) {
     const mins = etaMinutesTo(unit.position.lat, unit.position.lng, destinationStop.lat, destinationStop.lng);
@@ -584,6 +597,7 @@ function renderBoardingPanel(list) {
   document.getElementById('exitBoardBtn').addEventListener('click', () => {
     boardedUnitId = null;
     destinationStop = null;
+    setVisibleStops(null);
     renderUnitsList();
   });
 }
