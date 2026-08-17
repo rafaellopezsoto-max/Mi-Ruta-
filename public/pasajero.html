@@ -739,8 +739,9 @@ async function selectRoute(routeId) {
   if (destSearchMarker) { destSearchMarker.remove(); destSearchMarker = null; }
   document.getElementById('destAddressInput').value = '';
   document.getElementById('destResult').className = 'dest-result hint';
-  document.getElementById('destResult').textContent = 'Escribe tu destino o toca el mapa donde vas a bajarte.';
-
+  document.getElementById('destResult').textContent = boardedUnitId
+    ? 'Escribe tu destino o toca el mapa donde vas a bajarte.'
+    : 'Escríbelo y te decimos qué combi tomar y en qué parada bajarte.';
   const stopsRes = await fetch(`${API}/api/routes/${routeId}/stops`);
   currentStops = await stopsRes.json();
 
