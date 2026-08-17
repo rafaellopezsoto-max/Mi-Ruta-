@@ -24,9 +24,9 @@ module.exports = {
         { name: 'Santa Fe', lat: 32.435, lng: -117.052 },
         { name: 'Urbi Quinta Versalles', lat: 32.444, lng: -117.054 },
         { name: 'Lázaro Cárdenas', lat: 32.4495, lng: -117.057 },
-        { name: 'Soriana Súper La Gloria', lat: 32.451, lng: -117.0021 },
-        { name: 'Guardería La Gloria', lat: 32.452, lng: -117.003 },
-        { name: 'Taxis Verdes y Amarillos de Rosarito', lat: 32.4685, lng: -117.018 },
+        { name: 'Soriana Súper La Gloria', lat: 32.451, lng: -117.055 },
+        { name: 'Guardería La Gloria', lat: 32.452, lng: -117.054 },
+        { name: 'Taxis Verdes y Amarillos de Rosarito', lat: 32.4685, lng: -117.050 },
       ],
     },
     {
