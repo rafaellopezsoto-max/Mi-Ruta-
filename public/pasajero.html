@@ -371,6 +371,7 @@ function locatePassenger() {
         .setPopup(new maplibregl.Popup().setText('Tú estás aquí'))
         .addTo(map);
 
+      highlightNearestStop(best.id);
       renderUnitsList();
     },
     () => {
@@ -384,6 +385,42 @@ function locatePassenger() {
 
 document.getElementById('relocateBtn').addEventListener('click', locatePassenger);
 
+function highlightNearestStop(stopId) {
+  Object.entries(stopMarkers).forEach(([id, marker]) => {
+    const el = marker.getElement();
+    if (String(id) === String(stopId)) {
+      el.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#2f6fed;border:3px solid white;box-shadow:0 0 0 3px #2f6fed;';
+    } else {
+      el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#1f6e4f;border:2px solid white;box-shadow:0 0 0 1px #1f6e4f;';
+    }
+  });
+}
+
+function flashVehicleImage() {
+  const route = allRoutes.find(r => String(r.id) === String(currentRouteId));
+  if (!route) return;
+  const img = imgByColor[route.vehicle_label] || '';
+  if (!img) return;
+
+  if (routeImgTimer) { clearTimeout(routeImgTimer); routeImgTimer = null; }
+
+  const imgEl = document.getElementById('routeVehicleImg');
+  if (imgEl) {
+    imgEl.style.transition = 'none';
+    imgEl.style.display = '';
+    imgEl.style.opacity = '1';
+  }
+
+  routeImgTimer = setTimeout(() => {
+    const el2 = document.getElementById('routeVehicleImg');
+    if (el2) {
+      el2.style.transition = 'opacity 0.6s ease';
+      el2.style.opacity = '0';
+      setTimeout(() => { el2.style.display = 'none'; }, 600);
+    }
+  }, 10000);
+}
+
 function setVisibleStops(idsToShow) {
   const idSet = idsToShow ? new Set(idsToShow.filter(Boolean).map(String)) : null;
   Object.entries(stopMarkers).forEach(([id, marker]) => {
@@ -395,6 +432,7 @@ function setVisibleStops(idsToShow) {
 const FAR_STOP_KM = 2.5;
 
 function placeDestinationPin(lat, lng) {
+  flashVehicleImage();
   const resultBox = document.getElementById('destResult');
   if (!currentStops.length) {
     resultBox.className = 'dest-result hint';
@@ -618,7 +656,7 @@ function renderRouteRecommendations(recommendations, destination) {
 }
 
 function handleDestSearch() {
-  if (currentRouteId) {
+  if (boardedUnitId) {
     searchDestinationAddress();
   } else {
     findBestRoute();
@@ -682,6 +720,7 @@ async function loadRoutes() {
   const routes = await res.json();
   allRoutes = routes;
   renderRouteList();
+  if (routes.length) selectRoute(routes[0].id);
 }
 
 async function selectRoute(routeId) {
@@ -786,7 +825,6 @@ function renderUnitsList() {
 
 function boardUnit(unitId) {
   boardedUnitId = unitId;
-  destinationStop = null;
   logEvent('unit_boarded', { unitId, routeId: currentRouteId });
   renderUnitsList();
 }
