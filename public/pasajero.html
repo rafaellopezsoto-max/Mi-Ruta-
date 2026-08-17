@@ -56,6 +56,8 @@
     cursor: pointer;
   }
   .route-btn.active { border-color: var(--accent); background: var(--accent-dim); }
+  .route-btn.recommend-btn { align-items: flex-start; }
+  .route-btn.recommend-btn .swatch { margin-top: 4px; }
   .route-btn .swatch { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; border: 2px solid #00000022; }
 
   select, input, button {
@@ -246,16 +248,14 @@
 </header>
 
 <div class="panel">
-  <h2>1. Elige tu ruta</h2>
-  <div class="route-list" id="routeList"></div>
-
-  <h2>2. ¿A dónde vas? (opcional)</h2>
+  <h2>🧭 ¿A dónde vas?</h2>
   <div class="dest-search">
     <input type="text" id="destAddressInput" placeholder="Escribe tu destino aquí" />
     <button id="destSearchBtn">🔍</button>
   </div>
   <div id="destOptions" class="dest-options"></div>
-  <div id="destResult" class="dest-result hint">Escribe tu destino o toca el mapa donde vas a bajarte.</div>
+  <div id="destResult" class="dest-result hint">Escríbelo y te decimos qué combi tomar y en qué parada bajarte.</div>
+  <div id="routeRecommendations"></div>
 </div>
 
 <div id="routeInfo"></div>
@@ -264,7 +264,7 @@
 
 <div class="panel">
   <div id="stopBanner" class="stop-banner">
-    <span id="stopBannerText">Ubicando tu parada más cercana…</span>
+    <span id="stopBannerText">Escribe a dónde vas para ubicar tu parada.</span>
     <button id="relocateBtn">🔄 Reintentar</button>
   </div>
   <div class="share-toggle">
@@ -433,14 +433,6 @@ map.on('click', (e) => {
   placeDestinationPin(e.lngLat.lat, e.lngLat.lng);
 });
 
-function chooseDestinationOption(place) {
-  document.getElementById('destOptions').innerHTML = '';
-  document.getElementById('destAddressInput').value = place.displayName;
-  placeDestinationPin(place.lat, place.lng);
-  map.flyTo({ center: [place.lng, place.lat], zoom: 15 });
-}
-window.chooseDestinationOption = chooseDestinationOption;
-
 async function searchDestinationAddress() {
   const input = document.getElementById('destAddressInput');
   const resultBox = document.getElementById('destResult');
@@ -473,7 +465,9 @@ async function searchDestinationAddress() {
     }
 
     if (results.length === 1) {
-      chooseDestinationOption(results[0]);
+      document.getElementById('destAddressInput').value = results[0].displayName;
+      placeDestinationPin(results[0].lat, results[0].lng);
+      map.flyTo({ center: [results[0].lng, results[0].lat], zoom: 15 });
       return;
     }
 
@@ -483,7 +477,13 @@ async function searchDestinationAddress() {
       .map((r, i) => `<button type="button" class="dest-option" data-idx="${i}">${r.displayName}</button>`)
       .join('');
     optionsBox.querySelectorAll('.dest-option').forEach(btn => {
-      btn.addEventListener('click', () => chooseDestinationOption(results[Number(btn.dataset.idx)]));
+      btn.addEventListener('click', () => {
+        const place = results[Number(btn.dataset.idx)];
+        optionsBox.innerHTML = '';
+        document.getElementById('destAddressInput').value = place.displayName;
+        placeDestinationPin(place.lat, place.lng);
+        map.flyTo({ center: [place.lng, place.lat], zoom: 15 });
+      });
     });
   } catch (err) {
     resultBox.className = 'dest-result hint';
@@ -491,9 +491,137 @@ async function searchDestinationAddress() {
   }
 }
 
-document.getElementById('destSearchBtn').addEventListener('click', searchDestinationAddress);
+async function findBestRoute() {
+  const input = document.getElementById('destAddressInput');
+  const resultBox = document.getElementById('destResult');
+  const optionsBox = document.getElementById('destOptions');
+  const recBox = document.getElementById('routeRecommendations');
+  const query = input.value.trim();
+  optionsBox.innerHTML = '';
+  recBox.innerHTML = '';
+
+  if (!query) {
+    resultBox.className = 'dest-result hint';
+    resultBox.textContent = 'Escríbelo y te decimos qué combi tomar y en qué parada bajarte.';
+    return;
+  }
+
+  resultBox.className = 'dest-result hint';
+  resultBox.textContent = 'Buscando tu destino…';
+
+  let geoResults;
+  try {
+    const geoRes = await fetch(`${API}/api/geocode?q=${encodeURIComponent(query)}`);
+    geoResults = await geoRes.json();
+  } catch (err) {
+    resultBox.className = 'dest-result hint';
+    resultBox.textContent = 'No se pudo buscar la dirección. Intenta de nuevo.';
+    return;
+  }
+
+  if (!Array.isArray(geoResults) || !geoResults.length) {
+    resultBox.className = 'dest-result hint';
+    resultBox.textContent = 'No encontramos esa dirección. Intenta con más detalle.';
+    return;
+  }
+
+  if (geoResults.length > 1) {
+    resultBox.className = 'dest-result hint';
+    resultBox.textContent = 'Encontramos varios lugares — elige el correcto:';
+    optionsBox.innerHTML = geoResults
+      .map((r, i) => `<button type="button" class="dest-option" data-idx="${i}">${r.displayName}</button>`)
+      .join('');
+    optionsBox.querySelectorAll('.dest-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        optionsBox.innerHTML = '';
+        recommendRoutesFor(geoResults[Number(btn.dataset.idx)]);
+      });
+    });
+    return;
+  }
+
+  recommendRoutesFor(geoResults[0]);
+}
+
+function recommendRoutesFor(destination) {
+  const resultBox = document.getElementById('destResult');
+  resultBox.className = 'dest-result hint';
+  resultBox.textContent = 'Ubicando tu posición…';
+
+  if (!navigator.geolocation) {
+    resultBox.className = 'dest-result warn';
+    resultBox.textContent = 'Tu navegador no puede darnos tu ubicación, así que no podemos recomendarte una ruta.';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const origin = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    resultBox.textContent = 'Buscando la mejor combi…';
+    try {
+      const res = await fetch(`${API}/api/routes/find`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin, destination: { lat: destination.lat, lng: destination.lng } }),
+      });
+      const recommendations = await res.json();
+      renderRouteRecommendations(recommendations, destination);
+    } catch (err) {
+      resultBox.className = 'dest-result hint';
+      resultBox.textContent = 'No se pudo calcular la ruta. Intenta de nuevo.';
+    }
+  }, () => {
+    resultBox.className = 'dest-result warn';
+    resultBox.textContent = 'No pudimos obtener tu ubicación.';
+  }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+function renderRouteRecommendations(recommendations, destination) {
+  const resultBox = document.getElementById('destResult');
+  const recBox = document.getElementById('routeRecommendations');
+
+  if (!Array.isArray(recommendations) || !recommendations.length) {
+    resultBox.className = 'dest-result warn';
+    resultBox.textContent = 'Ninguna ruta llega cerca de ese destino.';
+    recBox.innerHTML = '';
+    return;
+  }
+
+  resultBox.className = 'dest-result';
+  resultBox.innerHTML = 'Te recomendamos:';
+  recBox.innerHTML = recommendations.map((r, i) => {
+    const route = allRoutes.find(rt => String(rt.id) === String(r.routeId));
+    const color = route ? (route.color || '#ccc') : '#ccc';
+    return `
+      <button type="button" class="route-btn recommend-btn" data-idx="${i}" style="margin-bottom:10px;">
+        <span class="swatch" style="background:${color}"></span>
+        <span>
+          <div style="font-weight:800;">${r.routeName}</div>
+          <div style="font-size:13px;font-weight:400;color:#5a655f;">Sube en: ${r.boardAt} · Bájate en: ${r.alightAt} · ~${r.estimatedTravelMinutes} min</div>
+        </span>
+      </button>
+    `;
+  }).join('');
+
+  recBox.querySelectorAll('.recommend-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const rec = recommendations[Number(btn.dataset.idx)];
+      recBox.innerHTML = '';
+      await selectRoute(rec.routeId);
+      placeDestinationPin(destination.lat, destination.lng);
+    });
+  });
+}
+
+function handleDestSearch() {
+  if (currentRouteId) {
+    searchDestinationAddress();
+  } else {
+    findBestRoute();
+  }
+}
+document.getElementById('destSearchBtn').addEventListener('click', handleDestSearch);
 document.getElementById('destAddressInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') searchDestinationAddress();
+  if (e.key === 'Enter') handleDestSearch();
 });
 
 const imgByColor = {
@@ -504,6 +632,7 @@ const imgByColor = {
 
 function renderRouteList() {
   const list = document.getElementById('routeList');
+  if (!list) return;
   list.innerHTML = allRoutes.map(r => `
     <button type="button" class="route-btn ${String(r.id) === String(currentRouteId) ? 'active' : ''}" data-route="${r.id}">
       <span class="swatch" style="background:${r.color || '#ccc'}"></span>
@@ -548,7 +677,6 @@ async function loadRoutes() {
   const routes = await res.json();
   allRoutes = routes;
   renderRouteList();
-  if (routes.length) selectRoute(routes[0].id);
 }
 
 async function selectRoute(routeId) {
@@ -566,7 +694,6 @@ async function selectRoute(routeId) {
   unitMarkers = {};
   if (destSearchMarker) { destSearchMarker.remove(); destSearchMarker = null; }
   document.getElementById('destAddressInput').value = '';
-  document.getElementById('destOptions').innerHTML = '';
   document.getElementById('destResult').className = 'dest-result hint';
   document.getElementById('destResult').textContent = 'Escribe tu destino o toca el mapa donde vas a bajarte.';
 
