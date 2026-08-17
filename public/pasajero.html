@@ -77,6 +77,9 @@
     min-height: 56px;
   }
 
+  .dest-search { display: flex; gap: 8px; margin-bottom: 12px; }
+  .dest-search input { flex: 1; font-size: 18px; min-height: 56px; }
+  .dest-search button { width: auto; padding: 0 20px; }
   .dest-result {
     background: white;
     border: 2px solid var(--line);
@@ -227,7 +230,11 @@
   <div class="route-list" id="routeList"></div>
 
   <h2>2. ¿A dónde vas? (opcional)</h2>
-  <div id="destResult" class="dest-result hint">Toca el mapa donde vas a bajarte y te decimos la parada más cercana.</div>
+  <div class="dest-search">
+    <input type="text" id="destAddressInput" placeholder="Escribe tu destino aquí" />
+    <button id="destSearchBtn">🔍</button>
+  </div>
+  <div id="destResult" class="dest-result hint">Escribe tu destino o toca el mapa donde vas a bajarte.</div>
 </div>
 
 <div id="routeInfo"></div>
@@ -397,6 +404,49 @@ map.on('click', (e) => {
   placeDestinationPin(e.lngLat.lat, e.lngLat.lng);
 });
 
+async function searchDestinationAddress() {
+  const input = document.getElementById('destAddressInput');
+  const resultBox = document.getElementById('destResult');
+  const query = input.value.trim();
+
+  if (!query) {
+    resultBox.className = 'dest-result hint';
+    resultBox.textContent = 'Escribe tu destino o toca el mapa donde vas a bajarte.';
+    return;
+  }
+  if (!currentStops.length) {
+    resultBox.className = 'dest-result hint';
+    resultBox.textContent = 'Primero elige tu ruta arriba.';
+    return;
+  }
+
+  resultBox.className = 'dest-result hint';
+  resultBox.textContent = 'Buscando…';
+
+  try {
+    const res = await fetch(`${API}/api/geocode?q=${encodeURIComponent(query)}`);
+    const results = await res.json();
+
+    if (!Array.isArray(results) || !results.length) {
+      resultBox.className = 'dest-result hint';
+      resultBox.textContent = 'No encontramos esa dirección. Intenta con más detalle, o toca el mapa directamente.';
+      return;
+    }
+
+    const place = results[0];
+    placeDestinationPin(place.lat, place.lng);
+    map.flyTo({ center: [place.lng, place.lat], zoom: 15 });
+  } catch (err) {
+    resultBox.className = 'dest-result hint';
+    resultBox.textContent = 'No se pudo buscar la dirección. Intenta de nuevo o toca el mapa.';
+  }
+}
+
+document.getElementById('destSearchBtn').addEventListener('click', searchDestinationAddress);
+document.getElementById('destAddressInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') searchDestinationAddress();
+});
+
 const imgByColor = {
   'Blanco y Amarillo': 'combi-blanco-amarillo.svg',
   'Verde': 'combi-verde.svg',
@@ -416,22 +466,32 @@ function renderRouteList() {
   });
 }
 
+let routeImgTimer = null;
+
 function renderRouteInfo(routeId) {
   const route = allRoutes.find(r => String(r.id) === String(routeId));
   const box = document.getElementById('routeInfo');
+  if (routeImgTimer) { clearTimeout(routeImgTimer); routeImgTimer = null; }
   if (!route) { box.className = ''; box.innerHTML = ''; return; }
 
   const img = imgByColor[route.vehicle_label] || '';
-  const fareCards = (route.fares || [])
-    .map(f => `<div class="fare-card"><div class="price">$${f.price}</div><div class="label">${f.label}</div></div>`)
-    .join('');
 
   box.className = 'visible';
   box.innerHTML = `
-    ${img ? `<img src="${img}" alt="${route.vehicle_label}" />` : ''}
-    ${route.vehicle_label ? `<span class="vehicle-tag">${route.vehicle_label}</span>` : ''}
-    ${fareCards ? `<div class="fare-cards">${fareCards}</div>` : ''}
+    ${img ? `<img src="${img}" alt="${route.vehicle_label}" id="routeVehicleImg" />` : ''}
+    ${route.vehicle_label ? `<span class="vehicle-tag">Tu combi es: ${route.vehicle_label}</span>` : ''}
   `;
+
+  if (img) {
+    routeImgTimer = setTimeout(() => {
+      const imgEl = document.getElementById('routeVehicleImg');
+      if (imgEl) {
+        imgEl.style.transition = 'opacity 0.6s ease';
+        imgEl.style.opacity = '0';
+        setTimeout(() => { imgEl.style.display = 'none'; }, 600);
+      }
+    }, 10000);
+  }
 }
 
 async function loadRoutes() {
@@ -456,8 +516,9 @@ async function selectRoute(routeId) {
   Object.values(unitMarkers).forEach(m => m.remove());
   unitMarkers = {};
   if (destSearchMarker) { destSearchMarker.remove(); destSearchMarker = null; }
+  document.getElementById('destAddressInput').value = '';
   document.getElementById('destResult').className = 'dest-result hint';
-  document.getElementById('destResult').textContent = 'Toca el mapa donde vas a bajarte y te decimos la parada más cercana.';
+  document.getElementById('destResult').textContent = 'Escribe tu destino o toca el mapa donde vas a bajarte.';
 
   const stopsRes = await fetch(`${API}/api/routes/${routeId}/stops`);
   currentStops = await stopsRes.json();
