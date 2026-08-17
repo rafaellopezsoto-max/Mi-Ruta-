@@ -239,6 +239,17 @@
     <span id="stopBannerText">Ubicando tu parada más cercana…</span>
     <button id="relocateBtn">🔄 Reintentar</button>
   </div>
+  <div class="share-toggle">
+    <div class="row">
+      <span>Compartir mi ubicación con el chofer</span>
+      <label class="switch">
+        <input type="checkbox" id="shareToggle" />
+        <span class="slider"></span>
+      </label>
+    </div>
+    <p>Así el chofer sabe cuánta gente lo espera. No comparte tu nombre, y solo se envía si estás cerca del recorrido.</p>
+  </div>
+
   <h2>Unidades en camino</h2>
   <div id="unitsList" class="empty">Selecciona una ruta para ver las unidades activas.</div>
 </div>
@@ -423,6 +434,7 @@ async function loadRoutes() {
 
 async function selectRoute(routeId) {
   if (currentRouteId) socket.emit('unsubscribe_route', currentRouteId);
+  if (currentRouteId && shareWatchId) socket.emit('passenger_stop_sharing', { routeId: currentRouteId, passengerId });
   currentRouteId = routeId;
   logEvent('route_selected', { routeId });
   renderRouteList();
@@ -582,6 +594,49 @@ socket.on('location_update', (data) => {
   unit.position = { lat: data.lat, lng: data.lng };
   placeUnitMarker(data.unitId, data.lat, data.lng);
   renderUnitsList();
+});
+
+let shareWatchId = null;
+const passengerId = sessionId;
+
+function startSharingLocation() {
+  if (!navigator.geolocation || shareWatchId) return;
+  shareWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      socket.emit('passenger_location', {
+        routeId: currentRouteId,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        passengerId,
+      });
+    },
+    () => {},
+    { enableHighAccuracy: true, maximumAge: 8000, timeout: 10000 }
+  );
+}
+
+function stopSharingLocation(routeIdToNotify) {
+  if (shareWatchId) {
+    navigator.geolocation.clearWatch(shareWatchId);
+    shareWatchId = null;
+  }
+  if (routeIdToNotify) {
+    socket.emit('passenger_stop_sharing', { routeId: routeIdToNotify, passengerId });
+  }
+}
+
+document.getElementById('shareToggle').addEventListener('change', (e) => {
+  if (e.target.checked) {
+    startSharingLocation();
+    logEvent('share_location_on', { routeId: currentRouteId });
+  } else {
+    stopSharingLocation(currentRouteId);
+    logEvent('share_location_off', { routeId: currentRouteId });
+  }
+});
+
+window.addEventListener('beforeunload', () => {
+  if (shareWatchId) stopSharingLocation(currentRouteId);
 });
 
 map.on('load', loadRoutes);
