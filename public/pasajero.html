@@ -313,17 +313,30 @@ map.on('load', () => {
     type: 'line',
     source: 'route-line',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': '#2f6fed', 'line-width': 4, 'line-dasharray': [1, 2] },
+    paint: { 'line-color': '#2f6fed', 'line-width': 4 },
   });
 });
 
-function updateRouteLine(fromLat, fromLng, toLat, toLng) {
+async function updateRouteLine(fromLat, fromLng, toLat, toLng) {
   const source = map.getSource('route-line');
   if (!source) return;
+
   source.setData({
     type: 'Feature',
     geometry: { type: 'LineString', coordinates: [[fromLng, fromLat], [toLng, toLat]] },
   });
+
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.routes && data.routes[0]) {
+      const currentSource = map.getSource('route-line');
+      if (currentSource) currentSource.setData({ type: 'Feature', geometry: data.routes[0].geometry });
+    }
+  } catch (err) {
+    // Si falla el servicio de ruteo, se queda la línea recta.
+  }
 }
 
 function clearRouteLine() {
