@@ -301,6 +301,36 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+let lastKnownPosition = null;
+
+map.on('load', () => {
+  map.addSource('route-line', {
+    type: 'geojson',
+    data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } },
+  });
+  map.addLayer({
+    id: 'route-line-layer',
+    type: 'line',
+    source: 'route-line',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': '#2f6fed', 'line-width': 4, 'line-dasharray': [1, 2] },
+  });
+});
+
+function updateRouteLine(fromLat, fromLng, toLat, toLng) {
+  const source = map.getSource('route-line');
+  if (!source) return;
+  source.setData({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: [[fromLng, fromLat], [toLng, toLat]] },
+  });
+}
+
+function clearRouteLine() {
+  const source = map.getSource('route-line');
+  if (source) source.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+}
+
 let allRoutes = [];
 let stopMarkers = {};
 let unitMarkers = {};
@@ -360,6 +390,7 @@ function locatePassenger() {
         if (d < bestDist) { bestDist = d; best = stop; }
       });
       passengerStop = best;
+      lastKnownPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       logEvent('gps_located', { routeId: currentRouteId });
       bannerText.textContent = `Tu parada: ${best.name} (a ${bestDist.toFixed(2)} km de ti)`;
 
@@ -468,6 +499,9 @@ function placeDestinationPin(lat, lng) {
     .setLngLat([lng, lat])
     .setPopup(new maplibregl.Popup().setText('Tu destino'))
     .addTo(map);
+
+  const origin = lastKnownPosition || { lat: best.lat, lng: best.lng };
+  updateRouteLine(origin.lat, origin.lng, lat, lng);
 
   if (boardedUnitId && bestDist <= FAR_STOP_KM) {
     destinationStop = best;
@@ -729,6 +763,7 @@ async function selectRoute(routeId) {
   Object.values(unitMarkers).forEach(m => m.remove());
   unitMarkers = {};
   if (destSearchMarker) { destSearchMarker.remove(); destSearchMarker = null; }
+  clearRouteLine();
   document.getElementById('destAddressInput').value = '';
   document.getElementById('destResult').className = 'dest-result hint';
   document.getElementById('destResult').textContent = 'Escribe tu destino o toca el mapa donde vas a bajarte.';
@@ -871,6 +906,7 @@ function renderBoardingPanel(list) {
     boardedUnitId = null;
     destinationStop = null;
     setVisibleStops(null);
+    clearRouteLine();
     renderUnitsList();
   });
 }
