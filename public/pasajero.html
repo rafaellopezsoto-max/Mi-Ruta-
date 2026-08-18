@@ -389,7 +389,7 @@ function highlightNearestStop(stopId) {
   Object.entries(stopMarkers).forEach(([id, marker]) => {
     const el = marker.getElement();
     if (String(id) === String(stopId)) {
-      el.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#2f6fed;border:3px solid white;box-shadow:0 0 0 3px #2f6fed;';
+      el.style.cssText = 'width:20px;height:20px;border-radius:50%;background:#1f6e4f;border:4px solid #f6c945;box-shadow:0 0 0 2px #1f6e4f;';
     } else {
       el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#1f6e4f;border:2px solid white;box-shadow:0 0 0 1px #1f6e4f;';
     }
@@ -402,21 +402,27 @@ function flashVehicleImage() {
   const img = imgByColor[route.vehicle_label] || '';
   if (!img) return;
 
+  const box = document.getElementById('routeInfo');
   if (routeImgTimer) { clearTimeout(routeImgTimer); routeImgTimer = null; }
 
-  const imgEl = document.getElementById('routeVehicleImg');
-  if (imgEl) {
-    imgEl.style.transition = 'none';
-    imgEl.style.display = '';
-    imgEl.style.opacity = '1';
+  let imgEl = document.getElementById('routeVehicleImg');
+  if (!imgEl) {
+    imgEl = document.createElement('img');
+    imgEl.id = 'routeVehicleImg';
+    imgEl.src = img;
+    imgEl.alt = route.vehicle_label;
+    box.insertBefore(imgEl, box.firstChild);
   }
+  imgEl.style.transition = 'none';
+  imgEl.style.display = '';
+  imgEl.style.opacity = '1';
 
   routeImgTimer = setTimeout(() => {
     const el2 = document.getElementById('routeVehicleImg');
     if (el2) {
       el2.style.transition = 'opacity 0.6s ease';
       el2.style.opacity = '0';
-      setTimeout(() => { el2.style.display = 'none'; }, 600);
+      setTimeout(() => { if (el2.parentNode) el2.remove(); }, 600);
     }
   }, 10000);
 }
@@ -695,24 +701,10 @@ function renderRouteInfo(routeId) {
   if (routeImgTimer) { clearTimeout(routeImgTimer); routeImgTimer = null; }
   if (!route) { box.className = ''; box.innerHTML = ''; return; }
 
-  const img = imgByColor[route.vehicle_label] || '';
-
   box.className = 'visible';
   box.innerHTML = `
-    ${img ? `<img src="${img}" alt="${route.vehicle_label}" id="routeVehicleImg" />` : ''}
     ${route.vehicle_label ? `<span class="vehicle-tag">Tu combi es: ${route.vehicle_label}</span>` : ''}
   `;
-
-  if (img) {
-    routeImgTimer = setTimeout(() => {
-      const imgEl = document.getElementById('routeVehicleImg');
-      if (imgEl) {
-        imgEl.style.transition = 'opacity 0.6s ease';
-        imgEl.style.opacity = '0';
-        setTimeout(() => { imgEl.style.display = 'none'; }, 600);
-      }
-    }, 10000);
-  }
 }
 
 async function loadRoutes() {
@@ -739,9 +731,8 @@ async function selectRoute(routeId) {
   if (destSearchMarker) { destSearchMarker.remove(); destSearchMarker = null; }
   document.getElementById('destAddressInput').value = '';
   document.getElementById('destResult').className = 'dest-result hint';
-  document.getElementById('destResult').textContent = boardedUnitId
-    ? 'Escribe tu destino o toca el mapa donde vas a bajarte.'
-    : 'Escríbelo y te decimos qué combi tomar y en qué parada bajarte.';
+  document.getElementById('destResult').textContent = 'Escribe tu destino o toca el mapa donde vas a bajarte.';
+
   const stopsRes = await fetch(`${API}/api/routes/${routeId}/stops`);
   currentStops = await stopsRes.json();
 
