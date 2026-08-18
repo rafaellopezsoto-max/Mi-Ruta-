@@ -515,6 +515,7 @@ function placeDestinationPin(lat, lng) {
 
   const origin = lastKnownPosition || { lat: best.lat, lng: best.lng };
   updateRouteLine(origin.lat, origin.lng, lat, lng);
+  highlightNearestStop(best.id);
 
   if (boardedUnitId && bestDist <= FAR_STOP_KM) {
     destinationStop = best;
@@ -776,6 +777,7 @@ async function selectRoute(routeId) {
   Object.values(unitMarkers).forEach(m => m.remove());
   unitMarkers = {};
   if (destSearchMarker) { destSearchMarker.remove(); destSearchMarker = null; }
+  lastLineDestinationId = null;
   clearRouteLine();
   document.getElementById('destAddressInput').value = '';
   document.getElementById('destResult').className = 'dest-result hint';
@@ -863,8 +865,11 @@ function renderUnitsList() {
   }).join('');
 }
 
+let lastLineDestinationId = null;
+
 function boardUnit(unitId) {
   boardedUnitId = unitId;
+  lastLineDestinationId = null;
   logEvent('unit_boarded', { unitId, routeId: currentRouteId });
   renderUnitsList();
 }
@@ -892,6 +897,21 @@ function renderBoardingPanel(list) {
 
   setVisibleStops([passengerStop ? passengerStop.id : null, destinationStop.id]);
 
+  if (String(lastLineDestinationId) !== String(destinationStop.id)) {
+    lastLineDestinationId = destinationStop.id;
+    if (destSearchMarker) destSearchMarker.remove();
+    const destEl = document.createElement('div');
+    destEl.style.cssText = 'width:22px;height:22px;border-radius:50% 50% 50% 0;background:#e05d44;border:3px solid white;transform:rotate(-45deg);box-shadow:0 2px 5px rgba(0,0,0,0.35);';
+    destSearchMarker = new maplibregl.Marker({ element: destEl, anchor: 'bottom' })
+      .setLngLat([destinationStop.lng, destinationStop.lat])
+      .setPopup(new maplibregl.Popup().setText(destinationStop.name))
+      .addTo(map);
+
+    const lineOrigin = passengerStop || lastKnownPosition;
+    if (lineOrigin) updateRouteLine(lineOrigin.lat, lineOrigin.lng, destinationStop.lat, destinationStop.lng);
+  }
+  highlightNearestStop(destinationStop.id);
+
   let etaText = 'Calculando…';
   if (unit.position && destinationStop) {
     const mins = etaMinutesTo(unit.position.lat, unit.position.lng, destinationStop.lat, destinationStop.lng);
@@ -918,6 +938,7 @@ function renderBoardingPanel(list) {
   document.getElementById('exitBoardBtn').addEventListener('click', () => {
     boardedUnitId = null;
     destinationStop = null;
+    lastLineDestinationId = null;
     setVisibleStops(null);
     clearRouteLine();
     renderUnitsList();
