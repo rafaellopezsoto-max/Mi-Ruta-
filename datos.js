@@ -11,12 +11,12 @@ module.exports = {
         { label: 'Bajas en Tijuana', price: 30 },
       ],
       stops: [
-        { name: 'Inicio Bulevar Benito Juárez', lat: 32.3328, lng: -117.0560 },
-        { name: 'Pabellón Rosarito', lat: 32.3769, lng: -117.0606 },
-        { name: 'Ejido Plan Libertador', lat: 32.4102, lng: -117.0567 },
-        { name: 'Santa Fe', lat: 32.4269, lng: -117.0548 },
-        { name: 'Soriana Súper La Gloria', lat: 32.4519, lng: -117.0519 },
-        { name: 'Taxis Verdes y Amarillos de Rosarito', lat: 32.4685, lng: -117.0500 },
+          { name: 'Inicio Bulevar Benito Juárez', lat: 32.3328, lng: -117.0560 },
+          { name: 'Pabellón Rosarito', lat: 32.3769, lng: -117.0606 },
+          { name: 'Ejido Plan Libertador', lat: 32.4102, lng: -117.0567 },
+          { name: 'Santa Fe / La Gloria', lat: 32.4269, lng: -117.0548 },
+          { name: '5 y 10 (Tijuana)', lat: 32.4920, lng: -116.9720 },
+          { name: 'Blvd. Lázaro Cárdenas 5538 (La Esmeralda)', lat: 32.4950, lng: -116.9650 }
       ],
     },
     {
